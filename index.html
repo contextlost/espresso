@@ -19,9 +19,28 @@
 
         <div class="header">
             <div class="header-item header-item-left">
-                <button id="selectFileButton" class="apple-button">Select JSON File</button>
+                <div id="selectFileButton" class="icon-button">
+                    <span class="material-symbols-outlined">upload_file</span>
+                    <span>Upload</span>
+                </div>
+
                 <input type="file" id="jsonFileInput" accept=".json" title="Select a JSON file to visualize">
-                <button id="exportButton" class="apple-button">Export as PNG</button>
+                <input type="file" id="compareFileInput" accept=".json" title="Select a comparison JSON file">
+                
+                <div id="exportButton" class="icon-button">
+                    <span class="material-symbols-outlined">image</span>
+                    <span>Save</span>
+                </div>
+                
+                <div id="compareButton" class="icon-button">
+                    <span class="material-symbols-outlined">text_compare</span>
+                    <span>Compare</span>
+                </div>
+
+                <div id="clearCompareButton" class="icon-button">
+                    <span class="material-symbols-outlined">restore_page</span>
+                    <span>Clear</span>
+                </div>
             </div>
             <div class="header-item header-item-center">
                  <h1>
@@ -73,8 +92,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-    <script src="script.js?v=1"></script>
+    <script src="script.js?v=2"></script>
 </body>
-
 </html>
-
