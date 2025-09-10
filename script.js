@@ -14,7 +14,10 @@ window.addEventListener('load', () => {
     const selectFilesLink = document.getElementById('selectFilesLink'); 
     const selectFileButton = document.getElementById('selectFileButton'); 
     const shotVitalsContainer = document.getElementById('shotVitals'); 
-    const titleIcon = document.getElementById('titleIcon'); 
+    const titleIcon = document.getElementById('titleIcon');
+    const compareButton = document.getElementById('compareButton');
+    const compareFileInput = document.getElementById('compareFileInput');
+    const clearCompareButton = document.getElementById('clearCompareButton');
 
     // --- State Variables ---
     let mainChart, temperatureChart;
@@ -25,6 +28,36 @@ window.addEventListener('load', () => {
 
     // --- Utility Functions ---
     const isDarkMode = () => !document.body.classList.contains('light-mode');
+    
+    function interpolate(yArr, xArr, xNewArr) {
+        const newYArr = [];
+        if (!yArr || !xArr || yArr.length === 0 || xArr.length === 0) {
+            return new Array(xNewArr.length).fill(null);
+        }
+
+        for (const xNew of xNewArr) {
+            const idx = xArr.findIndex(x => x >= xNew);
+
+            if (idx === -1) {
+                newYArr.push(yArr[yArr.length - 1]);
+            } else if (idx === 0) {
+                newYArr.push(yArr[0]);
+            } else {
+                const x0 = xArr[idx - 1];
+                const y0 = yArr[idx - 1];
+                const x1 = xArr[idx];
+                const y1 = yArr[idx];
+                
+                if (x1 - x0 === 0) {
+                    newYArr.push(y0);
+                } else {
+                    const yNew = y0 + (y1 - y0) * ((xNew - x0) / (x1 - x0));
+                    newYArr.push(yNew);
+                }
+            }
+        }
+        return newYArr;
+    }
 
     // --- Chart.js Plugins ---
     const syncedHoverLine = {
@@ -154,12 +187,20 @@ window.addEventListener('load', () => {
             const dataIndex = points[0].index;
             const time = chartDataStore.t[dataIndex];
             const volume = chartDataStore.v[dataIndex];
+            const pressureCompare = chartDataStore.cp_compare?.[dataIndex];
+            const flowCompare = chartDataStore.fl_compare?.[dataIndex];
 
             if (customTooltip) {
                 customTooltip.style.display = 'block';
                 let innerHtml = `<div>Time: ${time.toFixed(2)} s</div>`;
                 if (volume !== undefined && volume !== null) {
                     innerHtml += `<div>Volume: ${volume.toFixed(2)} g</div>`;
+                }
+                if (pressureCompare !== undefined && pressureCompare !== null) {
+                    innerHtml += `<div style="color: ${isDarkMode() ? 'rgba(0, 255, 255, 0.7)' : 'rgba(0, 0, 255, 0.7)'};">P (C): ${pressureCompare.toFixed(2)} bar</div>`;
+                }
+                if (flowCompare !== undefined && flowCompare !== null) {
+                    innerHtml += `<div style="color: ${isDarkMode() ? 'rgba(255, 0, 255, 0.7)' : 'rgba(128, 0, 128, 0.7)'};">F (C): ${flowCompare.toFixed(2)} g/s</div>`;
                 }
                 customTooltip.innerHTML = innerHtml;
 
@@ -202,6 +243,8 @@ window.addEventListener('load', () => {
         clearLegendValues(mainChart);
         clearLegendValues(temperatureChart);
 
+        updateTempDifference(); 
+
         mainChart.update('none');
         temperatureChart.update('none');
     };
@@ -220,7 +263,8 @@ window.addEventListener('load', () => {
                 shotDetailsContainer.style.display = 'flex';
                 chartsContainer.style.display = 'block';
                 shotVitalsContainer.style.display = 'block'; 
-                exportButton.style.display = 'block';
+                exportButton.style.display = 'flex';
+                compareButton.style.display = 'flex';
                 dropArea.style.display = 'none'; 
             } catch (error) {
                 errorMessage.textContent = 'Error parsing JSON file. Check file format.';
@@ -228,7 +272,49 @@ window.addEventListener('load', () => {
             }
         };
         reader.readAsText(file);
+        fileInput.value = null; 
     });
+
+    compareButton.addEventListener('click', () => {
+        compareFileInput.click();
+    });
+
+    compareFileInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        errorMessage.textContent = 'Processing comparison...';
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const jsonData = JSON.parse(e.target.result);
+                processComparisonData(jsonData);
+                errorMessage.textContent = '';
+                clearCompareButton.style.display = 'flex';
+            } catch (error) {
+                errorMessage.textContent = 'Error parsing comparison JSON file. Check file format.';
+                console.error('JSON Parse Error:', error);
+            }
+        };
+        reader.readAsText(file);
+        compareFileInput.value = null; 
+    });
+    
+    clearCompareButton.addEventListener('click', () => {
+        if (!mainChart) return;
+        mainChart.data.datasets = mainChart.data.datasets.filter(ds => !ds.label.includes('(Compare)'));
+        Object.keys(datasetConfigStore).forEach(key => {
+            if (key.includes('_compare')) {
+                delete datasetConfigStore[key];
+                delete chartDataStore[key];
+            }
+        });
+        mainChart.update('none');
+        generateCustomLegend('mainChartLegend', mainChart, datasetConfigStore);
+        clearCompareButton.style.display = 'none';
+        compareFileInput.value = null; 
+    });
+
 
     const handleExport = () => {
         if (typeof html2canvas === 'undefined') {
@@ -310,7 +396,7 @@ window.addEventListener('load', () => {
             temperatureChart.update();
             generateCustomLegend('mainChartLegend', mainChart, datasetConfigStore);
             generateCustomLegend('temperatureChartLegend', temperatureChart, datasetConfigStore);
-            updateTempDifference(); // UPDATED: Recalculate difference on theme change
+            updateTempDifference();
         }
     });
     
@@ -370,7 +456,8 @@ window.addEventListener('load', () => {
                     shotDetailsContainer.style.display = 'flex';
                     chartsContainer.style.display = 'block';
                     shotVitalsContainer.style.display = 'block'; 
-                    exportButton.style.display = 'block';
+                    exportButton.style.display = 'flex';
+                    compareButton.style.display = 'flex';
                     dropArea.style.display = 'none'; 
                 } catch (error) {
                     errorMessage.textContent = 'Error parsing JSON file. Check file format.';
@@ -378,11 +465,13 @@ window.addEventListener('load', () => {
                 }
             };
             reader.readAsText(file);
+            fileInput.value = null; 
         }
     }
     
-    // NEW: Dedicated function to calculate and update the temp difference
     function updateTempDifference() {
+        const tempDiffElement = document.getElementById('temp-diff-value');
+        if (!tempDiffElement) return;
         if (!chartDataStore.ct || chartDataStore.ct.length === 0) return;
 
         const lastDataIndex = chartDataStore.ct.length - 1;
@@ -391,15 +480,83 @@ window.addEventListener('load', () => {
 
         if (finalTemp != null && finalTargetTemp != null) {
             const tempDifference = (finalTargetTemp - finalTemp);
-            const tempDiffElement = document.getElementById('temp-diff-value');
-            if (tempDiffElement) {
-                tempDiffElement.textContent = `${tempDifference.toFixed(2)} °C`;
-            }
+            tempDiffElement.textContent = `${tempDifference.toFixed(2)} °C`;
+        } else {
+            tempDiffElement.textContent = '---';
         }
     }
 
     // --- Chart Logic ---
+    function processComparisonData(shotData) {
+        if (!shotData.samples || !Array.isArray(shotData.samples) || shotData.samples.length === 0) {
+            errorMessage.textContent = 'Comparison Shot JSON is missing "samples" data.';
+            return;
+        }
+        if (!chartDataStore.t || chartDataStore.t.length === 0) {
+            errorMessage.textContent = 'Load a main shot first before comparing.';
+            return;
+        }
+
+        const mainTimes = chartDataStore.t;
+        const samples = shotData.samples;
+        const startTime = samples[0]?.t || 0;
+        const compareTimesRaw = samples.map(s => (s.t - startTime) / 1000);
+        
+        const comparePressuresRaw = samples.map(s => s.cp);
+        const compareFlowsRaw = samples.map(s => s.fl);
+
+        const comparePressures = interpolate(comparePressuresRaw, compareTimesRaw, mainTimes);
+        const compareFlows = interpolate(compareFlowsRaw, compareTimesRaw, mainTimes);
+        
+        mainChart.data.datasets = mainChart.data.datasets.filter(ds => !ds.label.includes('(Compare)'));
+        Object.keys(datasetConfigStore).forEach(key => {
+            if (key.includes('_compare')) {
+                delete datasetConfigStore[key];
+            }
+        });
+
+        chartDataStore.cp_compare = comparePressures;
+        chartDataStore.fl_compare = compareFlows;
+
+        const compareConfig = {
+            cp_compare: {
+                label: 'Pressure (Compare)', color: 'rgba(0, 255, 255, 0.5)', lightColor: 'rgba(0, 0, 255, 0.5)',
+                visible: true, yAxisID: 'yPrimary', unit: 'bar', width: 2
+            },
+            fl_compare: {
+                label: 'Pump Flow (Compare)', color: 'rgba(255, 0, 255, 0.5)', lightColor: 'rgba(128, 0, 128, 0.5)',
+                visible: true, yAxisID: 'yPrimary', unit: 'g/s', width: 2
+            }
+        };
+        Object.assign(datasetConfigStore, compareConfig);
+
+        const createCompareDataset = (key) => {
+            const config = datasetConfigStore[key];
+            return {
+                label: config.label,
+                data: chartDataStore[key],
+                borderColor: isDarkMode() ? config.color : config.lightColor,
+                backgroundColor: 'transparent',
+                borderWidth: config.width,
+                pointRadius: 0,
+                fill: false,
+                yAxisID: config.yAxisID,
+                tension: 0.4
+            };
+        };
+
+        mainChart.data.datasets.push(createCompareDataset('cp_compare'), createCompareDataset('fl_compare'));
+        mainChart.update('none');
+
+        generateCustomLegend('mainChartLegend', mainChart, datasetConfigStore);
+        updateChartColors();
+    }
+
     function processAndDrawCharts(shotData) {
+        if (mainChart) { // Clear previous comparison if a new main shot is loaded
+            clearCompareButton.click();
+        }
+
         if (!shotData.samples || !Array.isArray(shotData.samples) || shotData.samples.length === 0) {
             errorMessage.textContent = 'Shot JSON is missing "samples" data.';
             return;
@@ -609,14 +766,11 @@ window.addEventListener('load', () => {
         let annotationPressure = null;
 
         if (shotStartIndex !== -1) {
-            // Find the index for the annotation when 'v' is > 0, after the shot has started
             const annotationIndex = shotData.samples.findIndex((s, index) => index >= shotStartIndex && s.v > 0);
             
             if (annotationIndex !== -1) {
                 const annotationSample = shotData.samples[annotationIndex];
-                // Calculate X value relative to the chart's start time (fileStartTime)
                 annotationTimeInSecs = (annotationSample.t - fileStartTime) / 1000;
-                // Get the Y value directly from the same sample
                 annotationPressure = annotationSample.cp;
             }
         }
@@ -633,7 +787,7 @@ window.addEventListener('load', () => {
                     easing: 'linear',
                     duration: 100,
                     from: NaN,
-                    delay: progressiveDraw
+                    delay: progressiveDraw // TYPO WAS HERE
                 },
                 y: {
                     type: 'number',
@@ -675,14 +829,12 @@ window.addEventListener('load', () => {
                                 type: 'point',
                                 xValue: annotationTimeInSecs,
                                 yValue: annotationPressure,
-                                pointStyle: 'crossRot', // This creates the 'X'
+                                pointStyle: 'crossRot', 
                                 radius: 8,
                                 borderWidth: 3,
-                                borderColor: '#FF0000', // Red outline
+                                borderColor: '#FF0000', 
                                 display: annotationTimeInSecs !== null
                             }
-                                
-                            
                         }
                     }
                 },
@@ -833,7 +985,7 @@ window.addEventListener('load', () => {
         let legendItems = [];
 
         if (containerId === 'mainChartLegend') {
-            const desiredOrder = ['t', 'cp', 'tp', 'fl', 'tf', 'pf', 'vf', 'v', 'ev'];
+            const desiredOrder = ['t', 'cp', 'tp', 'fl', 'tf', 'pf', 'vf', 'v', 'ev', 'cp_compare', 'fl_compare'];
             
             desiredOrder.forEach(key => {
                 if (config[key]) { 
@@ -854,7 +1006,16 @@ window.addEventListener('load', () => {
             }));
         }
 
+        let comparisonItemsStarted = false;
+
         legendItems.forEach(item => {
+            if (item.label.includes('(Compare)') && !comparisonItemsStarted) {
+                const breakElement = document.createElement('div');
+                breakElement.className = 'legend-break';
+                legendContainer.appendChild(breakElement);
+                comparisonItemsStarted = true;
+            }
+
             const legendItem = document.createElement('div');
             const isDataset = item.datasetIndex !== undefined;
             const isHidden = isDataset && !chart.isDatasetVisible(item.datasetIndex);
@@ -872,7 +1033,16 @@ window.addEventListener('load', () => {
 
             const colorDot = document.createElement('span');
             colorDot.className = 'legend-color-dot';
-            if (isDataset) {
+
+            if (item.label === 'Time') {
+                colorDot.innerHTML = '⏱️';
+                colorDot.style.backgroundColor = 'transparent';
+                colorDot.style.fontSize = '14px';
+                colorDot.style.width = 'auto';
+                colorDot.style.height = 'auto';
+                colorDot.style.borderRadius = '0';
+                colorDot.style.lineHeight = '1';
+            } else if (isDataset) {
                 colorDot.style.backgroundColor = isDarkMode() ? item.color : item.lightColor;
             } else {
                  colorDot.style.backgroundColor = 'transparent';
@@ -899,10 +1069,18 @@ window.addEventListener('load', () => {
 
             const colorDot = document.createElement('span');
             colorDot.className = 'legend-color-dot';
+            colorDot.innerHTML = '<strong>Δ</strong>';
             colorDot.style.backgroundColor = 'transparent';
+            colorDot.style.width = 'auto';
+            colorDot.style.height = 'auto';
+            colorDot.style.borderRadius = '0';
+            colorDot.style.textAlign = 'center';
+            colorDot.style.minWidth = '12px';
+            colorDot.style.fontSize = '14px';
+            colorDot.style.lineHeight = '1';
 
             const labelText = document.createElement('span');
-            labelText.className = 'legend-label-text';
+labelText.className = 'legend-label-text';
             labelText.textContent = 'Difference:';
 
             const labelValue = document.createElement('span');
@@ -929,6 +1107,20 @@ window.addEventListener('load', () => {
                 }
             }
         });
+
+        if (chart.canvas.id === 'temperatureChart') {
+            const tempDiffElement = document.getElementById('temp-diff-value');
+            if (tempDiffElement) {
+                const currentTemp = chartDataStore.ct?.[dataIndex];
+                const targetTemp = chartDataStore.tt?.[dataIndex];
+                if (currentTemp != null && targetTemp != null) {
+                    const difference = targetTemp - currentTemp;
+                    tempDiffElement.textContent = `${difference.toFixed(2)} °C`;
+                } else {
+                    tempDiffElement.textContent = '---';
+                }
+            }
+        }
     }
 
     function clearLegendValues(chart) {
@@ -984,7 +1176,6 @@ window.addEventListener('load', () => {
         let firstDripsValue = 'N/A';
         if (shotStartIndex !== -1) {
             const shotStartTime = data.samples[shotStartIndex].t;
-            // Kept original logic (v > 0) for the metric as requested
             const firstDripIndex = data.samples.findIndex((s, index) => index >= shotStartIndex && s.v > 0);
             if (firstDripIndex !== -1) {
                 const firstDripTime = data.samples[firstDripIndex].t;
