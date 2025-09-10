@@ -30,9 +30,10 @@ body {
     color: var(--text-primary-dark);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     margin: 0;
-    padding: 24px;
+    padding: 0px;
     display: flex;
     justify-content: center;
+    align-items: flex-start;
     transition: background-color 0.3s, color 0.3s;
 }
 
@@ -49,7 +50,6 @@ body.light-mode {
 /* =================================================================
    HEADER & BUTTON STYLES
    - The header uses a 3-column grid for balanced alignment.
-   - .apple-button provides a clean, modern style for interactive elements.
 ================================================================= */
 .header {
     display: grid;
@@ -65,9 +65,12 @@ body.light-mode {
 
 .header-item-left {
     display: flex;
-    gap: 12px;
+    gap: 16px; 
     align-items: center;
     justify-self: start;
+    position: relative;
+    top: 10px;
+    margin: 0 40px; 
 }
 
 .header-item-right {
@@ -75,6 +78,7 @@ body.light-mode {
     display: flex;
     align-items: center;
     gap: 20px;
+    margin: 0 40px; 
 }
 
 .header-item h1 {
@@ -90,27 +94,45 @@ body.light-mode {
     vertical-align: sub;
 }
 
-.apple-button {
-    display: inline-block;
-    background-color: #007AFF;
-    color: #ffffff;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    font-weight: 600;
-    padding: 12px 20px;
-    border-radius: 8px;
+/* NEW: Styles for Icon Buttons in the header */
+.icon-button {
+    display: flex;
+    flex-direction: column; 
+    align-items: center;
+    width: 50px; /* MODIFIED: Added fixed width for alignment */
+    gap: 6px; 
     cursor: pointer;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-    transition: all 0.2s ease-in-out;
-    text-align: center;
-    border: none;
-    text-decoration: none;
-    font-size: 16px;
+    padding: 8px 12px; 
+    border-radius: 8px;
+    transition: background-color 0.2s ease-in-out;
+    color: var(--text-secondary-dark);
+    -webkit-user-select: none; 
+    -ms-user-select: none; 
+    user-select: none; 
 }
-.apple-button:hover {
-    background-color: #0056b3;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+
+body.light-mode .icon-button {
+    color: var(--text-secondary-light);
 }
+
+.icon-button:hover {
+    background-color: #3C4043;
+}
+
+body.light-mode .icon-button:hover {
+    background-color: #e8eaed;
+}
+
+.icon-button .material-symbols-outlined {
+    font-size: 40px; 
+}
+
+.icon-button span:last-child {
+    font-size: 14px; 
+    font-weight: 500;
+    white-space: nowrap;
+}
+
 
 input[type="file"] {
     display: none;
@@ -263,7 +285,7 @@ body.light-mode .description-input:focus {
     margin-top: 24px;
     margin-bottom: 12px;
     font-size: 0.9em;
-    font-weight: bold; /* UPDATED: Made headers bold */
+    font-weight: bold; 
     color: var(--text-secondary-dark);
     border-bottom: 1px solid var(--outline-dark);
     padding-bottom: 4px;
@@ -341,7 +363,7 @@ body.light-mode .vitals-unit { color: var(--text-secondary-light); }
     display: grid;
     gap: 4px;
     margin-bottom: 8px;
-    font-size: 14px; /* UPDATED: Ensured consistent font size */
+    font-size: 14px; 
 }
 
 .vitals-textarea {
@@ -351,7 +373,7 @@ body.light-mode .vitals-unit { color: var(--text-secondary-light); }
     color: var(--text-primary-dark);
     font-family: inherit;
     font-size: 1em;
-    font-weight: normal; /* UPDATED: Changed from bold */
+    font-weight: normal; 
     padding: 2px 4px;
     border-radius: 4px;
     box-sizing: border-box;
@@ -387,19 +409,23 @@ body.light-mode .vitals-textarea:focus {
     width: 100%;
 }
 #mainChartWrapper {
-    height: 450px;
+    height: 470px;
 }
 #temperatureChartWrapper {
-    height: 150px;
+    height: 180px;
 }
 
 .legend-container {
     display: flex;
     flex-wrap: wrap;
-    gap: 15px;
+    column-gap: 15px; 
+    row-gap: 4px;      
     margin-top: 12px;
-    margin-bottom: 24px;
+    margin-bottom: 4px;
     justify-content: center;
+    /* min-height: 95px; */
+    height: auto;
+    align-content: flex-start; /* MODIFIED: Aligns rows to the top */
 }
 .legend-item {
     display: flex;
@@ -437,6 +463,10 @@ body.light-mode .legend-item:hover { background-color: #e8eaed; }
     text-align: left;
     font-weight: bold;
     color: inherit;
+}
+.legend-break {
+    flex-basis: 100%;
+    height: 0;
 }
 
 /* =================================================================
@@ -507,8 +537,11 @@ body.light-mode input:checked + .slider:before {
      background-color: var(--text-primary-light);
 }
 .material-symbols-outlined {
-    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
     transition: color 0.3s;
+}
+body.light-mode .material-symbols-outlined {
+    font-variation-settings: 'FILL' 1, 'wght' 300, 'GRAD' 0, 'opsz' 24;
 }
 .switch-wrapper .material-symbols-outlined {
     font-size: 24px;
@@ -551,7 +584,9 @@ body.light-mode #customTooltip {
     border-color: #dadce0;
 }
 
-#exportButton {
+#exportButton,
+#compareButton,
+#clearCompareButton {
     display: none;
 }
 
