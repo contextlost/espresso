@@ -22,42 +22,29 @@ window.addEventListener('load', () => {
     // --- State Variables ---
     let mainChart, temperatureChart;
     let chartDataStore = {};
+    let compareDataStore = null;
     let datasetConfigStore = {};
     let currentProfileName = '';
     let currentTimestamp = '';
+    let originalMaxTime = 0;
 
     // --- Utility Functions ---
     const isDarkMode = () => !document.body.classList.contains('light-mode');
     
-    function interpolate(yArr, xArr, xNewArr) {
-        const newYArr = [];
-        if (!yArr || !xArr || yArr.length === 0 || xArr.length === 0) {
-            return new Array(xNewArr.length).fill(null);
-        }
-
-        for (const xNew of xNewArr) {
-            const idx = xArr.findIndex(x => x >= xNew);
-
-            if (idx === -1) {
-                newYArr.push(yArr[yArr.length - 1]);
-            } else if (idx === 0) {
-                newYArr.push(yArr[0]);
-            } else {
-                const x0 = xArr[idx - 1];
-                const y0 = yArr[idx - 1];
-                const x1 = xArr[idx];
-                const y1 = yArr[idx];
-                
-                if (x1 - x0 === 0) {
-                    newYArr.push(y0);
-                } else {
-                    const yNew = y0 + (y1 - y0) * ((xNew - x0) / (x1 - x0));
-                    newYArr.push(yNew);
-                }
+    const findClosestIndex = (timeArray, hoverTime) => {
+        if (!timeArray || timeArray.length === 0) return -1;
+        let closestIndex = 0;
+        let minDiff = Infinity;
+        for (let i = 0; i < timeArray.length; i++) {
+            const diff = Math.abs(timeArray[i] - hoverTime);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestIndex = i;
             }
+            if (diff > minDiff && timeArray[i] > hoverTime) break;
         }
-        return newYArr;
-    }
+        return closestIndex;
+    };
 
     // --- Chart.js Plugins ---
     const syncedHoverLine = {
@@ -105,7 +92,7 @@ window.addEventListener('load', () => {
 
             const { ctx, chartArea: { top }, scales: { x } } = chart;
             
-            if (chart.canvas.id === 'mainChart') {
+            if (chart.canvas.id === 'mainChart' && chartDataStore.t) {
                 const lastDataIndex = chartDataStore.t.length - 1;
                 if (lastDataIndex < 0) return;
                 
@@ -172,59 +159,59 @@ window.addEventListener('load', () => {
 
     const masterSyncHandler = (event) => {
         if (!mainChart || !temperatureChart) return;
-        
+    
         const getRelativePosition = (e, chart) => {
             const rect = chart.canvas.getBoundingClientRect();
             return { x: e.clientX - rect.left, y: e.clientY - rect.top };
         };
         const posMain = getRelativePosition(event, mainChart);
-        const posTemp = getRelativePosition(event, temperatureChart); 
-        mainChart.currentEventPosition = posMain;
-        temperatureChart.currentEventPosition = posTemp;
-        const points = mainChart.getElementsAtEventForMode(event, 'index', { intersect: false });
         
-        if (points.length > 0) {
-            const dataIndex = points[0].index;
-            const time = chartDataStore.t[dataIndex];
-            const volume = chartDataStore.v[dataIndex];
-            const pressureCompare = chartDataStore.cp_compare?.[dataIndex];
-            const flowCompare = chartDataStore.fl_compare?.[dataIndex];
-
-            if (customTooltip) {
-                customTooltip.style.display = 'block';
-                let innerHtml = `<div>Time: ${time.toFixed(2)} s</div>`;
-                if (volume !== undefined && volume !== null) {
-                    innerHtml += `<div>Volume: ${volume.toFixed(2)} g</div>`;
-                }
-                if (pressureCompare !== undefined && pressureCompare !== null) {
-                    innerHtml += `<div style="color: ${isDarkMode() ? 'rgba(0, 255, 255, 0.7)' : 'rgba(0, 0, 255, 0.7)'};">P (C): ${pressureCompare.toFixed(2)} bar</div>`;
-                }
-                if (flowCompare !== undefined && flowCompare !== null) {
-                    innerHtml += `<div style="color: ${isDarkMode() ? 'rgba(255, 0, 255, 0.7)' : 'rgba(128, 0, 128, 0.7)'};">F (C): ${flowCompare.toFixed(2)} g/s</div>`;
-                }
-                customTooltip.innerHTML = innerHtml;
-
-                const xOffset = 15;
-                let x = event.clientX + xOffset;
-                let y = event.clientY;
-
-                if (x + customTooltip.offsetWidth > window.innerWidth) {
-                    x = event.clientX - customTooltip.offsetWidth - xOffset;
-                }
+        if (posMain.x >= mainChart.chartArea.left && posMain.x <= mainChart.chartArea.right &&
+            posMain.y >= mainChart.chartArea.top && posMain.y <= mainChart.chartArea.bottom) {
+    
+            const posTemp = getRelativePosition(event, temperatureChart);
+            mainChart.currentEventPosition = posMain;
+            temperatureChart.currentEventPosition = posTemp;
+    
+            const time = mainChart.scales.x.getValueForPixel(posMain.x);
+    
+            const primaryIndex = findClosestIndex(chartDataStore.t, time);
+            const compareIndex = findClosestIndex(compareDataStore?.t, time);
+            
+            if (primaryIndex !== -1) {
+                const hoverTime = chartDataStore.t[primaryIndex];
+                const volume = chartDataStore.v[primaryIndex];
                 
-                if (y + customTooltip.offsetHeight > window.innerHeight) {
-                    y = event.clientY - customTooltip.offsetHeight;
+                if (customTooltip) {
+                    customTooltip.style.display = 'block';
+                    let innerHtml = `<div>Time: ${time.toFixed(2)} s</div>`;
+                    if (hoverTime <= (chartDataStore.t[chartDataStore.t.length - 1] || 0) && volume !== undefined && volume !== null) {
+                        innerHtml += `<div>Volume: ${volume.toFixed(2)} g</div>`;
+                    }
+                    customTooltip.innerHTML = innerHtml;
+    
+                    const xOffset = 15;
+                    let x = event.clientX + xOffset;
+                    let y = event.clientY;
+    
+                    if (x + customTooltip.offsetWidth > window.innerWidth) {
+                        x = event.clientX - customTooltip.offsetWidth - xOffset;
+                    }
+                    
+                    if (y + customTooltip.offsetHeight > window.innerHeight) {
+                        y = event.clientY - customTooltip.offsetHeight;
+                    }
+    
+                    customTooltip.style.left = `${x}px`;
+                    customTooltip.style.top = `${y}px`;
                 }
-
-                customTooltip.style.left = `${x}px`;
-                customTooltip.style.top = `${y}px`;
             }
             
-            updateLegendValues(mainChart, dataIndex);
-            updateLegendValues(temperatureChart, dataIndex);
+            updateLegendValues(mainChart, primaryIndex, compareIndex, time);
+            updateLegendValues(temperatureChart, primaryIndex, compareIndex, time);
             mainChart.update('none');
             temperatureChart.update('none');
-
+    
         } else {
             masterMouseoutHandler(); 
         }
@@ -267,8 +254,8 @@ window.addEventListener('load', () => {
                 compareButton.style.display = 'flex';
                 dropArea.style.display = 'none'; 
             } catch (error) {
-                errorMessage.textContent = 'Error parsing JSON file. Check file format.';
-                console.error('JSON Parse Error:', error);
+                errorMessage.textContent = 'Error processing file. Check file format.';
+                console.error('File Processing Error:', error);
             }
         };
         reader.readAsText(file);
@@ -292,8 +279,12 @@ window.addEventListener('load', () => {
                 errorMessage.textContent = '';
                 clearCompareButton.style.display = 'flex';
             } catch (error) {
-                errorMessage.textContent = 'Error parsing comparison JSON file. Check file format.';
-                console.error('JSON Parse Error:', error);
+                errorMessage.textContent = 'Error processing comparison file. Check format and content.';
+                 if (error instanceof SyntaxError) {
+                    console.error('JSON Parse Error:', error);
+                } else {
+                    console.error('Data Processing Error:', error);
+                }
             }
         };
         reader.readAsText(file);
@@ -302,15 +293,21 @@ window.addEventListener('load', () => {
     
     clearCompareButton.addEventListener('click', () => {
         if (!mainChart) return;
+
         mainChart.data.datasets = mainChart.data.datasets.filter(ds => !ds.label.includes('(Compare)'));
-        Object.keys(datasetConfigStore).forEach(key => {
-            if (key.includes('_compare')) {
-                delete datasetConfigStore[key];
-                delete chartDataStore[key];
-            }
-        });
+        temperatureChart.data.datasets = temperatureChart.data.datasets.filter(ds => !ds.label.includes('(Compare)'));
+        
+        mainChart.options.scales.x.max = originalMaxTime;
+        temperatureChart.options.scales.x.max = originalMaxTime;
+
         mainChart.update('none');
+        temperatureChart.update('none');
+        
+        compareDataStore = null; 
+        
         generateCustomLegend('mainChartLegend', mainChart, datasetConfigStore);
+        generateCustomLegend('temperatureChartLegend', temperatureChart, datasetConfigStore);
+        
         clearCompareButton.style.display = 'none';
         compareFileInput.value = null; 
     });
@@ -460,8 +457,8 @@ window.addEventListener('load', () => {
                     compareButton.style.display = 'flex';
                     dropArea.style.display = 'none'; 
                 } catch (error) {
-                    errorMessage.textContent = 'Error parsing JSON file. Check file format.';
-                    console.error('JSON Parse Error:', error);
+                    errorMessage.textContent = 'Error processing file. Check file format.';
+                    console.error('File Processing Error:', error);
                 }
             };
             reader.readAsText(file);
@@ -487,73 +484,65 @@ window.addEventListener('load', () => {
     }
 
     // --- Chart Logic ---
-    function processComparisonData(shotData) {
-        if (!shotData.samples || !Array.isArray(shotData.samples) || shotData.samples.length === 0) {
-            errorMessage.textContent = 'Comparison Shot JSON is missing "samples" data.';
-            return;
-        }
-        if (!chartDataStore.t || chartDataStore.t.length === 0) {
-            errorMessage.textContent = 'Load a main shot first before comparing.';
+    function processComparisonData(jsonData) {
+        if (!jsonData.samples || !Array.isArray(jsonData.samples)) {
+            errorMessage.textContent = 'Comparison file is missing valid "samples" data.';
             return;
         }
 
-        const mainTimes = chartDataStore.t;
-        const samples = shotData.samples;
-        const startTime = samples[0]?.t || 0;
-        const compareTimesRaw = samples.map(s => (s.t - startTime) / 1000);
+        const compareSamples = jsonData.samples;
+        const compareStartTime = compareSamples[0]?.t || 0;
         
-        const comparePressuresRaw = samples.map(s => s.cp);
-        const compareFlowsRaw = samples.map(s => s.fl);
-
-        const comparePressures = interpolate(comparePressuresRaw, compareTimesRaw, mainTimes);
-        const compareFlows = interpolate(compareFlowsRaw, compareTimesRaw, mainTimes);
-        
-        mainChart.data.datasets = mainChart.data.datasets.filter(ds => !ds.label.includes('(Compare)'));
-        Object.keys(datasetConfigStore).forEach(key => {
-            if (key.includes('_compare')) {
-                delete datasetConfigStore[key];
+        compareDataStore = {};
+        const compareKeys = ['t', 'cp', 'fl', 'pf', 'tf', 'vf', 'v', 'ev', 'ct', 'tt', 'tp'];
+        compareKeys.forEach(key => {
+            if (compareSamples.some(s => s[key] !== undefined)) {
+                if (key === 't') {
+                    compareDataStore.t = compareSamples.map(s => (s.t - compareStartTime) / 1000);
+                } else {
+                    compareDataStore[key] = compareSamples.map(s => s[key]);
+                }
             }
         });
 
-        chartDataStore.cp_compare = comparePressures;
-        chartDataStore.fl_compare = compareFlows;
+        const compareDuration = compareDataStore.t ? compareDataStore.t[compareDataStore.t.length - 1] : 0;
+        const maxDuration = Math.max(originalMaxTime, compareDuration);
+        
+        mainChart.data.datasets = mainChart.data.datasets.filter(ds => !ds.label.includes('(Compare)'));
+        temperatureChart.data.datasets = temperatureChart.data.datasets.filter(ds => !ds.label.includes('(Compare)'));
 
-        const compareConfig = {
-            cp_compare: {
-                label: 'Pressure (Compare)', color: 'rgba(0, 255, 255, 0.5)', lightColor: 'rgba(0, 0, 255, 0.5)',
-                visible: true, yAxisID: 'yPrimary', unit: 'bar', width: 2
-            },
-            fl_compare: {
-                label: 'Pump Flow (Compare)', color: 'rgba(255, 0, 255, 0.5)', lightColor: 'rgba(128, 0, 128, 0.5)',
-                visible: true, yAxisID: 'yPrimary', unit: 'g/s', width: 2
+        const compareDatasetConfig = {
+            cp_compare: { label: 'Pressure (Compare)', color: 'rgba(0, 255, 255, 0.5)', lightColor: 'rgba(0, 0, 255, 0.5)', yAxisID: 'yPrimary', unit: 'bar' },
+            fl_compare: { label: 'Pump Flow (Compare)', color: 'rgba(255, 0, 255, 0.5)', lightColor: 'rgba(128, 0, 128, 0.5)', yAxisID: 'yPrimary', unit: 'g/s' }
+        };
+
+        Object.keys(compareDatasetConfig).forEach(key => {
+            const dataKey = key.replace('_compare', '');
+            if (compareDataStore[dataKey]) {
+                const config = compareDatasetConfig[key];
+                mainChart.data.datasets.push({
+                    label: config.label,
+                    data: compareDataStore[dataKey].map((val, i) => ({ x: compareDataStore.t[i], y: val })),
+                    borderColor: isDarkMode() ? config.color : config.lightColor,
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    yAxisID: config.yAxisID,
+                    tension: 0.4
+                });
+                datasetConfigStore[key] = config;
             }
-        };
-        Object.assign(datasetConfigStore, compareConfig);
+        });
 
-        const createCompareDataset = (key) => {
-            const config = datasetConfigStore[key];
-            return {
-                label: config.label,
-                data: chartDataStore[key],
-                borderColor: isDarkMode() ? config.color : config.lightColor,
-                backgroundColor: 'transparent',
-                borderWidth: config.width,
-                pointRadius: 0,
-                fill: false,
-                yAxisID: config.yAxisID,
-                tension: 0.4
-            };
-        };
-
-        mainChart.data.datasets.push(createCompareDataset('cp_compare'), createCompareDataset('fl_compare'));
-        mainChart.update('none');
+        mainChart.options.scales.x.max = maxDuration;
+        temperatureChart.options.scales.x.max = maxDuration;
+        mainChart.update();
+        temperatureChart.update();
 
         generateCustomLegend('mainChartLegend', mainChart, datasetConfigStore);
-        updateChartColors();
     }
 
     function processAndDrawCharts(shotData) {
-        if (mainChart) { // Clear previous comparison if a new main shot is loaded
+        if (mainChart) {
             clearCompareButton.click();
         }
 
@@ -565,6 +554,7 @@ window.addEventListener('load', () => {
         currentProfileName = shotData.profile;
         currentTimestamp = shotData.timestamp;
 
+        // THIS IS THE DEFINITION THAT WAS MISSING
         const datasetConfig = {
             t:  { label: 'Time', isTime: true, unit: 's' },
             cp: { label: 'Pressure', color: '#00FFFF', lightColor: '#0000FF', visible: true, yAxisID: 'yPrimary', unit: 'bar', width: 3 },
@@ -716,7 +706,7 @@ window.addEventListener('load', () => {
         const mainChartDatasets = createDatasets('yPrimary');
         const temperatureChartDatasets = createDatasets('yTemp');
         
-        const allTemps = [...chartDataStore.ct, ...chartDataStore.tt].filter(t => t != null && !isNaN(t));
+        const allTemps = [...(chartDataStore.ct || []), ...(chartDataStore.tt || [])].filter(t => t != null && !isNaN(t));
         const minTemp = allTemps.length > 0 ? Math.floor(Math.min(...allTemps)) - 1 : 80;
         const maxTemp = allTemps.length > 0 ? Math.ceil(Math.max(...allTemps)) + 1 : 100;
         
@@ -726,6 +716,7 @@ window.addEventListener('load', () => {
         };
         
         const finalTime = chartDataStore.t.length > 0 ? chartDataStore.t[chartDataStore.t.length - 1] : 30;
+        originalMaxTime = finalTime;
 
         const onZoomOrPan = ({chart}) => {
             const newMin = chart.scales.x.min;
@@ -778,7 +769,7 @@ window.addEventListener('load', () => {
         const baseOptions = {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+            interaction: { mode: 'x', intersect: false },
             layout: { padding: { left: 20, top: 30 } },
             events: ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'],
             animation: {
@@ -787,7 +778,7 @@ window.addEventListener('load', () => {
                     easing: 'linear',
                     duration: 100,
                     from: NaN,
-                    delay: progressiveDraw // TYPO WAS HERE
+                    delay: progressiveDraw
                 },
                 y: {
                     type: 'number',
@@ -1094,12 +1085,22 @@ labelText.className = 'legend-label-text';
         }
     }
 
-    function updateLegendValues(chart, dataIndex) {
+    function updateLegendValues(chart, primaryIndex, compareIndex, hoverTime) {
         const config = datasetConfigStore;
         Object.keys(config).forEach(key => {
             const valueEl = document.getElementById(`${chart.canvas.id}-legend-${config[key].label.replace(/\s+/g, '')}`);
             if (valueEl) {
-                const value = chartDataStore[key]?.[dataIndex];
+                let value = null;
+                if (key.includes('_compare')) {
+                    if (compareDataStore && compareIndex !== -1 && hoverTime <= (compareDataStore.t[compareDataStore.t.length-1] || 0) ) {
+                        value = compareDataStore[key.replace('_compare', '')]?.[compareIndex];
+                    }
+                } else {
+                    if (primaryIndex !== -1 && hoverTime <= (chartDataStore.t[chartDataStore.t.length-1] || 0) ) {
+                         value = chartDataStore[key]?.[primaryIndex];
+                    }
+                }
+
                 if (value !== undefined && value !== null) {
                     valueEl.textContent = `${value.toFixed(2)} ${config[key].unit || ''}`;
                 } else {
@@ -1111,8 +1112,8 @@ labelText.className = 'legend-label-text';
         if (chart.canvas.id === 'temperatureChart') {
             const tempDiffElement = document.getElementById('temp-diff-value');
             if (tempDiffElement) {
-                const currentTemp = chartDataStore.ct?.[dataIndex];
-                const targetTemp = chartDataStore.tt?.[dataIndex];
+                const currentTemp = chartDataStore.ct?.[primaryIndex];
+                const targetTemp = chartDataStore.tt?.[primaryIndex];
                 if (currentTemp != null && targetTemp != null) {
                     const difference = targetTemp - currentTemp;
                     tempDiffElement.textContent = `${difference.toFixed(2)} °C`;
@@ -1130,6 +1131,11 @@ labelText.className = 'legend-label-text';
         });
         const timeValueEl = document.getElementById(`${chart.canvas.id}-legend-Time`);
         if(timeValueEl) timeValueEl.innerHTML = '&nbsp;';
+        const compareKeys = Object.keys(datasetConfigStore).filter(k => k.includes('_compare'));
+        compareKeys.forEach(key => {
+            const valueEl = document.getElementById(`${chart.canvas.id}-legend-${datasetConfigStore[key].label.replace(/\s+/g, '')}`);
+            if (valueEl) valueEl.innerHTML = '&nbsp;';
+        });
     }
 
     function setupRatioCalculator(yieldValue, defaultRatioText) {
@@ -1277,7 +1283,6 @@ labelText.className = 'legend-label-text';
             </div>
         `;
 
-        // --- 4. Add event listeners ---
         setupRatioCalculator(yieldValue, defaultRatioText);
         
         const allTextInputs = document.querySelectorAll('#shotDescription, #shotVitals .vitals-input, #shotVitals .vitals-textarea');
