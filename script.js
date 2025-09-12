@@ -10,10 +10,10 @@ window.addEventListener('load', () => {
     const themeToggle = document.getElementById('theme-toggle');
     const exportWrapper = document.getElementById('export-wrapper');
     const customTooltip = document.getElementById('customTooltip');
-    const dropArea = document.getElementById('drop-area'); 
-    const selectFilesLink = document.getElementById('selectFilesLink'); 
-    const selectFileButton = document.getElementById('selectFileButton'); 
-    const shotVitalsContainer = document.getElementById('shotVitals'); 
+    const dropArea = document.getElementById('drop-area');
+    const selectFilesLink = document.getElementById('selectFilesLink');
+    const selectFileButton = document.getElementById('selectFileButton');
+    const shotVitalsContainer = document.getElementById('shotVitals');
     const titleIcon = document.getElementById('titleIcon');
     const compareButton = document.getElementById('compareButton');
     const compareFileInput = document.getElementById('compareFileInput');
@@ -27,10 +27,12 @@ window.addEventListener('load', () => {
     let currentProfileName = '';
     let currentTimestamp = '';
     let originalMaxTime = 0;
+    let currentFileName = '';
+    let currentShotId = '';
 
     // --- Utility Functions ---
     const isDarkMode = () => !document.body.classList.contains('light-mode');
-    
+
     const findClosestIndex = (timeArray, hoverTime) => {
         if (!timeArray || timeArray.length === 0) return -1;
         let closestIndex = 0;
@@ -51,12 +53,12 @@ window.addEventListener('load', () => {
         id: 'syncedHoverLine',
         afterDatasetsDraw: (chart) => {
             if (!chart.currentEventPosition) return;
-            
+
             const ctx = chart.ctx;
             const x = chart.currentEventPosition.x;
             const topY = chart.chartArea.top;
             const bottomY = chart.chartArea.bottom;
-            
+
             ctx.save();
             ctx.beginPath();
             ctx.moveTo(x, topY);
@@ -65,7 +67,7 @@ window.addEventListener('load', () => {
             ctx.strokeStyle = isDarkMode() ? 'rgba(180, 180, 180, 0.7)' : 'rgba(70, 70, 70, 0.7)';
             ctx.setLineDash([6, 6]);
             ctx.stroke();
-            
+
             if (chart.canvas.id === 'mainChart') {
                 const y = chart.currentEventPosition.y;
                 const leftX = chart.chartArea.left;
@@ -91,11 +93,11 @@ window.addEventListener('load', () => {
             if (!lines) return;
 
             const { ctx, chartArea: { top }, scales: { x } } = chart;
-            
+
             if (chart.canvas.id === 'mainChart' && chartDataStore.t) {
                 const lastDataIndex = chartDataStore.t.length - 1;
                 if (lastDataIndex < 0) return;
-                
+
                 const finalTime = chartDataStore.t[lastDataIndex];
                 const allTimes = [0, ...lines, finalTime];
 
@@ -109,7 +111,7 @@ window.addEventListener('load', () => {
                     const endTime = allTimes[i];
                     const duration = endTime - startTime;
 
-                    if (duration > 0.1) { 
+                    if (duration > 0.1) {
                         const startIndex = chartDataStore.t.findIndex(t => t >= startTime);
                         let endIndex = chartDataStore.t.findLastIndex(t => t <= endTime);
                         if (endIndex < startIndex) endIndex = startIndex;
@@ -144,7 +146,7 @@ window.addEventListener('load', () => {
             });
         }
     };
-
+    
     Chart.register(syncedHoverLine, targetChangeLines);
     Chart.defaults.font.family = 'Roboto, sans-serif';
     Chart.defaults.font.size = 13;
@@ -159,29 +161,34 @@ window.addEventListener('load', () => {
 
     const masterSyncHandler = (event) => {
         if (!mainChart || !temperatureChart) return;
-    
+
         const getRelativePosition = (e, chart) => {
             const rect = chart.canvas.getBoundingClientRect();
             return { x: e.clientX - rect.left, y: e.clientY - rect.top };
         };
+
         const posMain = getRelativePosition(event, mainChart);
-        
-        if (posMain.x >= mainChart.chartArea.left && posMain.x <= mainChart.chartArea.right &&
-            posMain.y >= mainChart.chartArea.top && posMain.y <= mainChart.chartArea.bottom) {
-    
-            const posTemp = getRelativePosition(event, temperatureChart);
+        const posTemp = getRelativePosition(event, temperatureChart);
+
+        const isOverMain = posMain.x >= mainChart.chartArea.left && posMain.x <= mainChart.chartArea.right &&
+                                 posMain.y >= mainChart.chartArea.top && posMain.y <= mainChart.chartArea.bottom;
+
+        const isOverTemp = posTemp.x >= temperatureChart.chartArea.left && posTemp.x <= temperatureChart.chartArea.right &&
+                                 posTemp.y >= temperatureChart.chartArea.top && posTemp.y <= temperatureChart.chartArea.bottom;
+
+        if (isOverMain || isOverTemp) {
             mainChart.currentEventPosition = posMain;
             temperatureChart.currentEventPosition = posTemp;
-    
+
             const time = mainChart.scales.x.getValueForPixel(posMain.x);
-    
+
             const primaryIndex = findClosestIndex(chartDataStore.t, time);
             const compareIndex = findClosestIndex(compareDataStore?.t, time);
-            
+
             if (primaryIndex !== -1) {
                 const hoverTime = chartDataStore.t[primaryIndex];
                 const volume = chartDataStore.v[primaryIndex];
-                
+
                 if (customTooltip) {
                     customTooltip.style.display = 'block';
                     let innerHtml = `<div>Time: ${time.toFixed(2)} s</div>`;
@@ -189,31 +196,31 @@ window.addEventListener('load', () => {
                         innerHtml += `<div>Volume: ${volume.toFixed(2)} g</div>`;
                     }
                     customTooltip.innerHTML = innerHtml;
-    
+
                     const xOffset = 15;
                     let x = event.clientX + xOffset;
                     let y = event.clientY;
-    
+
                     if (x + customTooltip.offsetWidth > window.innerWidth) {
                         x = event.clientX - customTooltip.offsetWidth - xOffset;
                     }
-                    
+
                     if (y + customTooltip.offsetHeight > window.innerHeight) {
                         y = event.clientY - customTooltip.offsetHeight;
                     }
-    
+
                     customTooltip.style.left = `${x}px`;
                     customTooltip.style.top = `${y}px`;
                 }
             }
             
             updateLegendValues(mainChart, primaryIndex, compareIndex, time);
-            updateLegendValues(temperatureChart, primaryIndex, compareIndex, time);
+            
             mainChart.update('none');
             temperatureChart.update('none');
-    
+
         } else {
-            masterMouseoutHandler(); 
+            masterMouseoutHandler();
         }
     };
 
@@ -226,35 +233,53 @@ window.addEventListener('load', () => {
 
         mainChart.currentEventPosition = null;
         temperatureChart.currentEventPosition = null;
-        
+
         clearLegendValues(mainChart);
         clearLegendValues(temperatureChart);
 
-        updateTempDifference(); 
+        updateTempDifference();
 
         mainChart.update('none');
         temperatureChart.update('none');
     };
-    
+
     fileInput.addEventListener('change', (event) => {
         const file = event.target.files[0];
         if (!file) return;
         
-        errorMessage.textContent = '';
+        currentFileName = file.name;
+
+        errorMessage.textContent = 'Uploading and analyzing...';
         const reader = new FileReader();
-        reader.onload = (e) => {
+
+        reader.onload = async (e) => {
             try {
-                const jsonData = JSON.parse(e.target.result);
+                const fileContent = e.target.result;
+
+                // CHANGED: The URL now points to the Cloudflare function endpoint
+                const response = await fetch('/analyze-shot', {
+                    method: 'POST',
+                    body: fileContent,
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Analysis failed on the server.');
+                }
+
                 exportWrapper.style.display = 'block';
-                processAndDrawCharts(jsonData);
+                processAndDrawCharts(result);
                 shotDetailsContainer.style.display = 'flex';
                 chartsContainer.style.display = 'block';
                 shotVitalsContainer.style.display = 'block'; 
                 exportButton.style.display = 'flex';
                 compareButton.style.display = 'flex';
                 dropArea.style.display = 'none'; 
+                errorMessage.textContent = '';
+
             } catch (error) {
-                errorMessage.textContent = 'Error processing file. Check file format.';
+                errorMessage.textContent = `Error: ${error.message}`;
                 console.error('File Processing Error:', error);
             }
         };
@@ -269,7 +294,7 @@ window.addEventListener('load', () => {
     compareFileInput.addEventListener('change', (event) => {
         const file = event.target.files[0];
         if (!file) return;
-        
+
         errorMessage.textContent = 'Processing comparison...';
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -281,35 +306,34 @@ window.addEventListener('load', () => {
             } catch (error) {
                 errorMessage.textContent = 'Error processing comparison file. Check format and content.';
                  if (error instanceof SyntaxError) {
-                    console.error('JSON Parse Error:', error);
-                } else {
-                    console.error('Data Processing Error:', error);
-                }
+                       console.error('JSON Parse Error:', error);
+                 } else {
+                       console.error('Data Processing Error:', error);
+                 }
             }
         };
         reader.readAsText(file);
-        compareFileInput.value = null; 
+        compareFileInput.value = null;
     });
-    
+
     clearCompareButton.addEventListener('click', () => {
         if (!mainChart) return;
 
         mainChart.data.datasets = mainChart.data.datasets.filter(ds => !ds.label.includes('(Compare)'));
         temperatureChart.data.datasets = temperatureChart.data.datasets.filter(ds => !ds.label.includes('(Compare)'));
-        
+
         mainChart.options.scales.x.max = originalMaxTime;
         temperatureChart.options.scales.x.max = originalMaxTime;
 
         mainChart.update('none');
         temperatureChart.update('none');
-        
-        compareDataStore = null; 
-        
-        generateCustomLegend('mainChartLegend', mainChart, datasetConfigStore);
-        generateCustomLegend('temperatureChartLegend', temperatureChart, datasetConfigStore);
-        
+
+        compareDataStore = null;
+
+        generateCustomLegend(mainChart, datasetConfigStore);
+
         clearCompareButton.style.display = 'none';
-        compareFileInput.value = null; 
+        compareFileInput.value = null;
     });
 
 
@@ -336,10 +360,10 @@ window.addEventListener('load', () => {
             tempDiv.style.padding = style.padding;
             tempDiv.style.boxSizing = 'border-box';
             tempDiv.style.textAlign = style.textAlign;
-            
+
             let value = el.value;
             tempDiv.textContent = value;
-            
+
             if (isTextarea) {
                 tempDiv.style.whiteSpace = 'pre-wrap';
                 tempDiv.style.wordWrap = 'break-word';
@@ -355,7 +379,7 @@ window.addEventListener('load', () => {
         temperatureChart.options.animation = false;
         mainChart.update('none');
         temperatureChart.update('none');
-        
+
         const exportBgColor = isDarkMode() ? 'rgb(0,0,0)' : 'rgb(255,255,255)';
 
         setTimeout(() => {
@@ -366,15 +390,26 @@ window.addEventListener('load', () => {
                 scale: 2,
             }).then(canvas => {
                 const link = document.createElement('a');
-                const profileName = (currentProfileName || 'espresso-shot').replace(/\s+/g, '-');
-                const timestampFormatted = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-                link.download = `${profileName}-${timestampFormatted}.png`;
+                let finalBaseName;
+
+                if (currentShotId) {
+                    // Use the ID from the JSON file to build the name
+                    finalBaseName = `shot-${currentShotId}`;
+                } else {
+                    // Fallback if the JSON has no "id" field
+                    const profileName = (currentProfileName || 'espresso-shot').replace(/\s+/g, '-');
+                    const timestampFormatted = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                    finalBaseName = `${profileName}-${timestampFormatted}`;
+                }
+            
+                link.download = `${finalBaseName}.png`;
+
                 link.href = canvas.toDataURL('image/png');
                 link.click();
-                
+
                 mainChart.options.animation = {};
                 temperatureChart.options.animation = {};
-                
+
                 replacements.forEach(item => {
                     item.original.style.display = '';
                     item.temp.remove();
@@ -391,17 +426,16 @@ window.addEventListener('load', () => {
             updateChartColors();
             mainChart.update();
             temperatureChart.update();
-            generateCustomLegend('mainChartLegend', mainChart, datasetConfigStore);
-            generateCustomLegend('temperatureChartLegend', temperatureChart, datasetConfigStore);
+            generateCustomLegend(mainChart, datasetConfigStore);
             updateTempDifference();
         }
     });
-    
+
     selectFilesLink.addEventListener('click', (e) => {
         e.preventDefault();
         fileInput.click();
     });
-    
+
     selectFileButton.addEventListener('click', () => {
         fileInput.click();
     });
@@ -412,7 +446,7 @@ window.addEventListener('load', () => {
             zone.addEventListener(eventName, preventDefaults, false);
         });
 
-        if (zone === dropArea) { 
+        if (zone === dropArea) {
             ['dragenter', 'dragover'].forEach(eventName => {
                 zone.addEventListener(eventName, highlight, false);
             });
@@ -437,35 +471,54 @@ window.addEventListener('load', () => {
         dropArea.classList.remove('highlight');
     }
 
+    // CHANGED: This entire function is now updated to use the fetch API
     function handleDrop(e) {
         const dt = e.dataTransfer;
         const files = dt.files;
 
         if (files.length > 0) {
             const file = files[0];
+            currentFileName = file.name;
+            
+            errorMessage.textContent = 'Uploading and analyzing...';
             const reader = new FileReader();
 
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
                 try {
-                    const jsonData = JSON.parse(e.target.result);
+                    const fileContent = e.target.result;
+
+                    // CHANGED: The URL now points to the Cloudflare function endpoint
+                    const response = await fetch('/analyze-shot', {
+                        method: 'POST',
+                        body: fileContent,
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.error || 'Analysis failed on the server.');
+                    }
+
                     exportWrapper.style.display = 'block';
-                    processAndDrawCharts(jsonData);
+                    processAndDrawCharts(result);
                     shotDetailsContainer.style.display = 'flex';
                     chartsContainer.style.display = 'block';
-                    shotVitalsContainer.style.display = 'block'; 
+                    shotVitalsContainer.style.display = 'block';
                     exportButton.style.display = 'flex';
                     compareButton.style.display = 'flex';
-                    dropArea.style.display = 'none'; 
+                    dropArea.style.display = 'none';
+                    errorMessage.textContent = '';
+
                 } catch (error) {
-                    errorMessage.textContent = 'Error processing file. Check file format.';
+                    errorMessage.textContent = `Error: ${error.message}`;
                     console.error('File Processing Error:', error);
                 }
             };
             reader.readAsText(file);
-            fileInput.value = null; 
+            fileInput.value = null;
         }
     }
-    
+
     function updateTempDifference() {
         const tempDiffElement = document.getElementById('temp-diff-value');
         if (!tempDiffElement) return;
@@ -492,7 +545,7 @@ window.addEventListener('load', () => {
 
         const compareSamples = jsonData.samples;
         const compareStartTime = compareSamples[0]?.t || 0;
-        
+
         compareDataStore = {};
         const compareKeys = ['t', 'cp', 'fl', 'pf', 'tf', 'vf', 'v', 'ev', 'ct', 'tt', 'tp'];
         compareKeys.forEach(key => {
@@ -507,28 +560,42 @@ window.addEventListener('load', () => {
 
         const compareDuration = compareDataStore.t ? compareDataStore.t[compareDataStore.t.length - 1] : 0;
         const maxDuration = Math.max(originalMaxTime, compareDuration);
-        
+
         mainChart.data.datasets = mainChart.data.datasets.filter(ds => !ds.label.includes('(Compare)'));
         temperatureChart.data.datasets = temperatureChart.data.datasets.filter(ds => !ds.label.includes('(Compare)'));
 
         const compareDatasetConfig = {
-            cp_compare: { label: 'Pressure (Compare)', color: 'rgba(0, 255, 255, 0.5)', lightColor: 'rgba(0, 0, 255, 0.5)', yAxisID: 'yPrimary', unit: 'bar' },
-            fl_compare: { label: 'Pump Flow (Compare)', color: 'rgba(255, 0, 255, 0.5)', lightColor: 'rgba(128, 0, 128, 0.5)', yAxisID: 'yPrimary', unit: 'g/s' }
+            cp_compare: { label: 'Pressure (Compare)', color: 'rgba(0, 255, 255, 0.5)', lightColor: 'rgba(0, 0, 255, 0.5)', yAxisID: 'yPrimary', unit: 'bar', visible: true, dash: [] },
+            fl_compare: { label: 'Pump Flow (Compare)', color: 'rgba(255, 0, 255, 0.5)', lightColor: 'rgba(128, 0, 128, 0.5)', yAxisID: 'yPrimary', unit: 'g/s', visible: true, dash: [] },
+            v_compare: { 
+                label: 'Volume (Compare)', 
+                color: 'rgba(50, 205, 50, 0.5)', 
+                lightColor: 'rgba(0, 100, 0, 0.5)', 
+                yAxisID: 'yVolume', 
+                unit: 'g', 
+                visible: true, 
+                dash: []
+            }
         };
 
         Object.keys(compareDatasetConfig).forEach(key => {
             const dataKey = key.replace('_compare', '');
             if (compareDataStore[dataKey]) {
                 const config = compareDatasetConfig[key];
-                mainChart.data.datasets.push({
-                    label: config.label,
-                    data: compareDataStore[dataKey].map((val, i) => ({ x: compareDataStore.t[i], y: val })),
-                    borderColor: isDarkMode() ? config.color : config.lightColor,
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    yAxisID: config.yAxisID,
-                    tension: 0.4
-                });
+
+                if (config.yAxisID) {
+                    mainChart.data.datasets.push({
+                        label: config.label,
+                        data: compareDataStore[dataKey].map((val, i) => ({ x: compareDataStore.t[i], y: val })),
+                        borderColor: isDarkMode() ? config.color : config.lightColor,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        yAxisID: config.yAxisID,
+                        tension: 0.4,
+                        borderDash: config.dash || [],
+                        hidden: !config.visible
+                    });
+                }
                 datasetConfigStore[key] = config;
             }
         });
@@ -538,7 +605,7 @@ window.addEventListener('load', () => {
         mainChart.update();
         temperatureChart.update();
 
-        generateCustomLegend('mainChartLegend', mainChart, datasetConfigStore);
+        generateCustomLegend(mainChart, datasetConfigStore);
     }
 
     function processAndDrawCharts(shotData) {
@@ -551,19 +618,19 @@ window.addEventListener('load', () => {
             return;
         }
 
+        currentShotId = shotData.id || '';
         currentProfileName = shotData.profile;
         currentTimestamp = shotData.timestamp;
-
-        // THIS IS THE DEFINITION THAT WAS MISSING
+        
         const datasetConfig = {
             t:  { label: 'Time', isTime: true, unit: 's' },
             cp: { label: 'Pressure', color: '#00FFFF', lightColor: '#0000FF', visible: true, yAxisID: 'yPrimary', unit: 'bar', width: 3 },
             fl: { label: 'Pump Flow', color: '#FF00FF', lightColor: '#800080', visible: true, yAxisID: 'yPrimary', unit: 'g/s', width: 3 },
             pf: { label: 'Puck Flow', color: '#BADA55', lightColor: '#558B2F', visible: false, yAxisID: 'yPrimary', unit: 'g/s' },
             tf: { label: 'Target Pump Flow', color: '#00BFA5', lightColor: '#00695C', visible: true, yAxisID: 'yPrimary', dash: [5, 5], unit: 'g/s', width: 3, fill: true, backgroundColor: 'rgba(255, 255, 0, 0.05)' },
-            vf: { label: 'Volume Flow', color: '#C0C0C0', lightColor: '#6B6B6B', visible: false, yAxisID: 'yPrimary', unit: 'g/s' },
-            v:  { label: 'Volume', color: '#8A2BE2', lightColor: '#4B0082', visible: false, yAxisID: 'yPrimary', unit: 'g' },
-            ev: { label: 'Estimated Volume', color: '#FF4500', lightColor: '#B22222', visible: false, yAxisID: 'yPrimary', dash: [5, 5], unit: 'g' },
+            vf: { label: 'Volume Flow', color: '#C0C0C0', lightColor: '#6B6B6B', visible: false, yAxisID: 'yVolume', unit: 'g/s' },
+            v:  { label: 'Volume', color: '#32CD32', lightColor: '#006400', visible: true, yAxisID: 'yVolume', unit: 'g' },
+            ev: { label: 'Estimated Volume', color: '#FF4500', lightColor: '#B22222', visible: false, yAxisID: 'yVolume', dash: [5, 5], unit: 'g' },
             ct: { label: 'Temperature', color: '#FFA500', lightColor: '#FF8C00', visible: true, yAxisID: 'yTemp', unit: '°C', width: 3 },
             tt: { label: 'Target Temperature', color: '#FF0000', lightColor: '#B22222', visible: true, yAxisID: 'yTemp', dash: [5, 5], unit: '°C' }
         };
@@ -573,15 +640,15 @@ window.addEventListener('load', () => {
         } else {
              delete datasetConfig.tp;
         }
-        
+
         datasetConfigStore = datasetConfig;
 
         const samples = shotData.samples;
-        const startTime = samples[0]?.t || 0; 
+        const startTime = samples[0]?.t || 0;
 
         const labels = samples.map(s => (s.t - startTime) / 1000);
         chartDataStore = {};
-        
+
         for (const key in datasetConfig) {
             if (key === 't') {
                  chartDataStore[key] = samples.map(s => (s.t - startTime) / 1000);
@@ -590,11 +657,15 @@ window.addEventListener('load', () => {
             }
         }
         
+        const allVolumes = (chartDataStore.v || []).filter(v => v != null);
+        const maxVolume = allVolumes.length > 0 ? Math.max(...allVolumes) : 20; 
+        const suggestedMaxVolume = Math.ceil(maxVolume / 5) * 5;
+        
         displayShotDetails(shotData);
 
         if (mainChart) mainChart.destroy();
         if (temperatureChart) temperatureChart.destroy();
-        
+
         const findPhaseChangeTimes = (samples) => {
             const times = new Set();
             const minTimeDiffMs = 1000;
@@ -622,7 +693,7 @@ window.addEventListener('load', () => {
                 const slopeTp2 = (p3.tp - p2.tp) / time2;
                 const slopeTf1 = (p2.tf - p1.tf) / time1;
                 const slopeTf2 = (p3.tf - p2.tf) / time2;
-                
+
                 const slopeChangeThreshold = 0.05;
 
                 if (Math.abs(slopeTp2 - slopeTp1) > slopeChangeThreshold ||
@@ -630,26 +701,26 @@ window.addEventListener('load', () => {
                     times.add(p2.t / 1000);
                 }
             }
-            
+
             for (let i = 1; i < samplesToConsider.length; i++) {
                 const currentSample = samplesToConsider[i];
                 const prevSample = samplesToConsider[i - 1];
                 const timeDiffMs = currentSample.t - prevSample.t;
-                
+
                 const tpChange = Math.abs(currentSample.tp - prevSample.tp);
                 const tfChange = Math.abs(currentSample.tf - prevSample.tf);
 
                 const isRapidChange = (tpChange >= 1.0 || tfChange >= 1.0) && timeDiffMs < 500;
                 const isModerateChange = (tpChange >= 0.4 || tfChange >= 0.4) && timeDiffMs < 250;
-                
-                const isCorner = i > 1 && 
-                               ((Math.abs(samplesToConsider[i].tp - samplesToConsider[i-1].tp) > Math.abs(samplesToConsider[i-1].tp - samplesToConsider[i-2].tp) * 2 && Math.abs(samplesToConsider[i-1].tp - samplesToConsider[i-2].tp) < 0.2) ||
-                               (Math.abs(samplesToConsider[i].tf - samplesToConsider[i-1].tf) > Math.abs(samplesToConsider[i-1].tf - samplesToConsider[i-2].tf) * 2 && Math.abs(samplesToConsider[i-1].tf - samplesToConsider[i-2].tf) < 0.2));
+
+                const isCorner = i > 1 &&
+                                     ((Math.abs(samplesToConsider[i].tp - samplesToConsider[i-1].tp) > Math.abs(samplesToConsider[i-1].tp - samplesToConsider[i-2].tp) * 2 && Math.abs(samplesToConsider[i-1].tp - samplesToConsider[i-2].tp) < 0.2) ||
+                                     (Math.abs(samplesToConsider[i].tf - samplesToConsider[i-1].tf) > Math.abs(samplesToConsider[i-1].tf - samplesToConsider[i-2].tf) * 2 && Math.abs(samplesToConsider[i-1].tf - samplesToConsider[i-2].tf) < 0.2));
 
 
                 if (isRapidChange || isModerateChange || isCorner) {
-                     const time = currentSample.t / 1000;
-                     times.add(time);
+                        const time = currentSample.t / 1000;
+                        times.add(time);
                 }
             }
 
@@ -660,7 +731,7 @@ window.addEventListener('load', () => {
                 if (sortedTimes[0] > 0.1) {
                     filteredTimes.push(sortedTimes[0]);
                 }
-                
+
                 for (let i = 1; i < sortedTimes.length; i++) {
                     if (filteredTimes.length > 0 && sortedTimes[i] - filteredTimes[filteredTimes.length - 1] > minTimeDiffMs / 1000) {
                         filteredTimes.push(sortedTimes[i]);
@@ -671,16 +742,16 @@ window.addEventListener('load', () => {
                     }
                 }
             }
-            
+
             return filteredTimes.filter(time => time > 0.1).sort((a,b) => a-b);
         };
-        
+
         const absoluteTargetChangeTimes = findPhaseChangeTimes(samples);
-        
+
         const targetChangeTimes = absoluteTargetChangeTimes.map(absoluteTimeInSec => {
             const absoluteTimeInMillis = absoluteTimeInSec * 1000;
             return (absoluteTimeInMillis - startTime) / 1000;
-        }).filter(t => t >= 0); 
+        }).filter(t => t >= 0);
 
         const createDatasets = (yAxisID) => {
             return Object.keys(datasetConfig)
@@ -702,19 +773,22 @@ window.addEventListener('load', () => {
                     };
                 });
         };
-
-        const mainChartDatasets = createDatasets('yPrimary');
-        const temperatureChartDatasets = createDatasets('yTemp');
         
+        const mainChartDatasets = [
+            ...createDatasets('yPrimary'),
+            ...createDatasets('yVolume')
+        ];
+        const temperatureChartDatasets = createDatasets('yTemp');
+
         const allTemps = [...(chartDataStore.ct || []), ...(chartDataStore.tt || [])].filter(t => t != null && !isNaN(t));
         const minTemp = allTemps.length > 0 ? Math.floor(Math.min(...allTemps)) - 1 : 80;
         const maxTemp = allTemps.length > 0 ? Math.ceil(Math.max(...allTemps)) + 1 : 100;
-        
+
         const progressiveDraw = (context) => {
             const index = context.dataIndex;
             return index * 10;
         };
-        
+
         const finalTime = chartDataStore.t.length > 0 ? chartDataStore.t[chartDataStore.t.length - 1] : 30;
         originalMaxTime = finalTime;
 
@@ -750,7 +824,7 @@ window.addEventListener('load', () => {
                 }
             }
         };
-        
+
         const fileStartTime = shotData.samples[0]?.t || 0;
         const shotStartIndex = shotData.samples.findIndex(s => (s.tp > 0 || s.tf > 0));
         let annotationTimeInSecs = null;
@@ -758,7 +832,7 @@ window.addEventListener('load', () => {
 
         if (shotStartIndex !== -1) {
             const annotationIndex = shotData.samples.findIndex((s, index) => index >= shotStartIndex && s.v > 0);
-            
+
             if (annotationIndex !== -1) {
                 const annotationSample = shotData.samples[annotationIndex];
                 annotationTimeInSecs = (annotationSample.t - fileStartTime) / 1000;
@@ -793,7 +867,7 @@ window.addEventListener('load', () => {
                 tooltip: {
                     enabled: false,
                 },
-                zoom: zoomOptions 
+                zoom: zoomOptions
             }
         };
 
@@ -802,8 +876,8 @@ window.addEventListener('load', () => {
             data: { labels: labels, datasets: mainChartDatasets },
             options: {
                 ...baseOptions,
-                plugins: { 
-                    ...baseOptions.plugins, 
+                plugins: {
+                    ...baseOptions.plugins,
                     targetChangeLines: { lines: targetChangeTimes },
                     annotation: {
                         animations: {
@@ -820,16 +894,41 @@ window.addEventListener('load', () => {
                                 type: 'point',
                                 xValue: annotationTimeInSecs,
                                 yValue: annotationPressure,
-                                pointStyle: 'crossRot', 
+                                pointStyle: 'crossRot',
                                 radius: 8,
                                 borderWidth: 3,
-                                borderColor: '#FF0000', 
+                                borderColor: '#FF0000',
                                 display: annotationTimeInSecs !== null
                             }
                         }
                     }
                 },
-                scales: { x: getXAxisConfig(finalTime), yPrimary: { ...getYAxisConfig(), title: { ...getYAxisConfig().title, text: 'Pressure / Flow / Volume' } } },
+                scales: {
+                    x: getXAxisConfig(finalTime),
+                    yPrimary: {
+                        ...getYAxisConfig(),
+                        title: { ...getYAxisConfig().title, text: 'Pressure / Flow' }
+                    },
+                    yVolume: {
+                        ...getYAxisConfig(),
+                        position: 'right',
+                        display: true,
+                        max: suggestedMaxVolume,
+                        grid: {
+                            ...getYAxisConfig().grid,
+                            drawOnChartArea: false,
+                        },
+                        title: {
+                            ...getYAxisConfig().title,
+                            display: true,
+                            text: 'Volume (g)',
+                        },
+                        ticks: {
+                            ...getYAxisConfig().ticks,
+                            stepSize: 5
+                        }
+                    }
+                },
             }
         });
 
@@ -838,26 +937,26 @@ window.addEventListener('load', () => {
             data: { labels: labels, datasets: temperatureChartDatasets },
             options: {
                 ...baseOptions,
-                plugins: { 
-                    ...baseOptions.plugins, 
+                plugins: {
+                    ...baseOptions.plugins,
                     targetChangeLines: { lines: targetChangeTimes },
                 },
-                scales: { 
-                    x: getXAxisConfig(finalTime), 
-                    yTemp: { 
-                        ...getYAxisConfig(), 
-                        min: minTemp, 
-                        max: maxTemp, 
+                scales: {
+                    x: getXAxisConfig(finalTime),
+                    yTemp: {
+                        ...getYAxisConfig(),
+                        min: minTemp,
+                        max: maxTemp,
                         title: { ...getYAxisConfig().title, text: 'Temperature (°C)' },
                         ticks: {
                             ...getYAxisConfig().ticks,
                             stepSize: 1
                         }
-                    } 
+                    }
                 },
             }
         });
-        
+
         const resetZoom = () => {
             if(mainChart) mainChart.resetZoom('none');
             if(temperatureChart) temperatureChart.resetZoom('none');
@@ -868,17 +967,16 @@ window.addEventListener('load', () => {
         chartsContainer.addEventListener('mousemove', (e) => masterSyncHandler(e));
         chartsContainer.addEventListener('mouseleave', () => masterMouseoutHandler());
 
-        updateChartColors(); 
+        updateChartColors();
 
-        generateCustomLegend('mainChartLegend', mainChart, datasetConfigStore);
-        generateCustomLegend('temperatureChartLegend', temperatureChart, datasetConfigStore);
+        generateCustomLegend(mainChart, datasetConfigStore);
         
         updateTempDifference();
         
         clearLegendValues(mainChart);
         clearLegendValues(temperatureChart);
     }
-    
+
     function updateChartColors() {
         if (!mainChart || !temperatureChart) return;
         const updateColors = (chart, config) => {
@@ -896,15 +994,15 @@ window.addEventListener('load', () => {
                 if(scale.border) scale.border.color = isDarkMode() ? '#F5F5F5' : '#212121';
             });
         };
-        
+
         updateColors(mainChart, datasetConfigStore);
         updateColors(temperatureChart, datasetConfigStore);
     }
-    
+
     function getXAxisConfig(maxTime) {
         return {
             type: 'linear',
-            grid: { 
+            grid: {
                 color: isDarkMode() ? 'rgba(60, 64, 67, 0.3)' : 'rgba(218, 220, 224, 0.3)',
                 borderDash: [4, 4]
             },
@@ -931,29 +1029,29 @@ window.addEventListener('load', () => {
                 const firstTickValue = Math.ceil(axis.min / stepSize) * stepSize;
 
                 for (let i = firstTickValue; i <= axis.max; i += stepSize) {
-                    if (i <= axis.max + 0.001) { 
+                    if (i <= axis.max + 0.001) {
                         newTicks.push({ value: i });
                     }
                 }
                 axis.ticks = newTicks;
             },
-            ticks: { 
-                color: isDarkMode() ? '#A0A2A5' : '#5f6368', 
-                autoSkip: false, 
+            ticks: {
+                color: isDarkMode() ? '#A0A2A5' : '#5f6368',
+                autoSkip: false,
                 callback: function(value) {
                     return Math.round(value) + 's';
                 }
             },
             title: { display: false },
             min: 0,
-            max: maxTime 
+            max: maxTime
         };
     }
 
     function getYAxisConfig() {
         return {
             type: 'linear', position: 'left',
-            grid: { 
+            grid: {
                 color: isDarkMode() ? 'rgba(60, 64, 67, 0.3)' : 'rgba(218, 220, 224, 0.3)',
                 borderDash: [4, 4]
             },
@@ -969,126 +1067,134 @@ window.addEventListener('load', () => {
         };
     }
 
-    function generateCustomLegend(containerId, chart, config) {
-        const legendContainer = document.getElementById(containerId);
+    function generateCustomLegend(chart, config) {
+        const legendContainer = document.getElementById('mainChartLegend');
+        if (document.getElementById('temperatureChartLegend')) {
+            document.getElementById('temperatureChartLegend').innerHTML = ''; // Clear old legend container
+        }
         legendContainer.innerHTML = '';
+    
+        const fullConfig = {
+            ...config,
+            'temp-diff': { label: 'Difference', unit: '°C' }
+        };
+    
+        const layout = [
+            ['t',  'cp', 'fl', 'v'],
+            ['pf', 'tp', 'tf', 'ev'],
+            ['vf', 'cp_compare', 'fl_compare', 'v_compare'],
+            ['spacer', 'tt', 'ct', 'temp-diff']
+        ];
+    
+        const table = document.createElement('table');
+        table.className = 'legend-table';
+    
+        layout.forEach(rowKeys => {
+            const tr = document.createElement('tr');
+            rowKeys.forEach(key => {
 
-        let legendItems = [];
+                if (key === 'spacer') {
+                    const tdSpacer = document.createElement('td');
+                    tdSpacer.colSpan = 2;
+                    tr.appendChild(tdSpacer);
+                    return;
+                }
 
-        if (containerId === 'mainChartLegend') {
-            const desiredOrder = ['t', 'cp', 'tp', 'fl', 'tf', 'pf', 'vf', 'v', 'ev', 'cp_compare', 'fl_compare'];
-            
-            desiredOrder.forEach(key => {
-                if (config[key]) { 
+                const item = fullConfig[key];
+    
+                const tdLabel = document.createElement('td');
+                tdLabel.className = 'legend-cell-label';
+    
+                const tdValue = document.createElement('td');
+                tdValue.className = 'legend-cell-value';
+    
+                if (item) {
+                    const legendItemContent = document.createElement('div');
+                    legendItemContent.className = 'legend-item';
+    
+                    const colorDot = document.createElement('span');
+                    colorDot.className = 'legend-color-dot';
+    
                     if (key === 't') {
-                        legendItems.push({ ...config.t, datasetIndex: undefined });
+                        colorDot.innerHTML = '⏱️';
+                    } else if (key.includes('v') || key.includes('ev')) {
+                        colorDot.innerHTML = '💧';
+                    } else if (key === 'temp-diff') {
+                        colorDot.innerHTML = '<strong>Δ</strong>';
                     } else {
-                        const datasetIndex = chart.data.datasets.findIndex(d => d.label === config[key].label);
-                        if (datasetIndex !== -1) {
-                            legendItems.push({ ...config[key], datasetIndex: datasetIndex });
-                        }
+                        colorDot.classList.add('is-dot');
+                         if (key === 'tt' || key === 'ct') {
+                              colorDot.classList.add('temp-dot');
+                         }
+                        const dotColor = isDarkMode() ? item.color : item.lightColor;
+                        colorDot.style.setProperty('--dot-color', dotColor);
+                    }
+                    
+                    const labelText = document.createElement('span');
+                    labelText.className = 'legend-label-text';
+                    labelText.textContent = `${item.label}:`;
+    
+                    legendItemContent.appendChild(colorDot);
+                    legendItemContent.appendChild(labelText);
+                    tdLabel.appendChild(legendItemContent);
+    
+                    const valueId = key === 'temp-diff' 
+                        ? 'temp-diff-value' 
+                        : `legend-value-${key}`;
+                    
+                    const labelValue = document.createElement('span');
+                    labelValue.className = 'legend-label-value';
+                    labelValue.id = valueId;
+                    tdValue.appendChild(labelValue);
+    
+                    const isTempDataset = key === 'tt' || key === 'ct';
+                    const chartInstance = isTempDataset ? temperatureChart : mainChart;
+                    const datasetIndex = chartInstance.data.datasets.findIndex(d => d.label === item.label);
+                    const isDataset = datasetIndex !== -1;
+                    
+                    if (isDataset) {
+                        const isHidden = !chartInstance.isDatasetVisible(datasetIndex);
+                        tdLabel.classList.toggle('hidden', isHidden);
+                        tdValue.classList.toggle('hidden', isHidden);
+    
+                        const handleClick = () => {
+                            chartInstance.setDatasetVisibility(datasetIndex, !chartInstance.isDatasetVisible(datasetIndex));
+                            const isNowHidden = !chartInstance.isDatasetVisible(datasetIndex);
+                            tdLabel.classList.toggle('hidden', isNowHidden);
+                            tdValue.classList.toggle('hidden', isNowHidden);
+                            chartInstance.update('none');
+                        };
+                        const handleMouseOver = () => {
+                            tdLabel.classList.add('hover');
+                            tdValue.classList.add('hover');
+                        };
+                        const handleMouseOut = () => {
+                            tdLabel.classList.remove('hover');
+                            tdValue.classList.remove('hover');
+                        };
+    
+                        [tdLabel, tdValue].forEach(td => {
+                            td.style.cursor = 'pointer';
+                            td.onclick = handleClick;
+                            td.onmouseenter = handleMouseOver;
+                            td.onmouseleave = handleMouseOut;
+                        });
                     }
                 }
+    
+                tr.appendChild(tdLabel);
+                tr.appendChild(tdValue);
             });
-        } else {
-            legendItems = chart.data.datasets.map((dataset, index) => ({
-                ...config[Object.keys(config).find(k => config[k].label === dataset.label)],
-                datasetIndex: index
-            }));
-        }
-
-        let comparisonItemsStarted = false;
-
-        legendItems.forEach(item => {
-            if (item.label.includes('(Compare)') && !comparisonItemsStarted) {
-                const breakElement = document.createElement('div');
-                breakElement.className = 'legend-break';
-                legendContainer.appendChild(breakElement);
-                comparisonItemsStarted = true;
-            }
-
-            const legendItem = document.createElement('div');
-            const isDataset = item.datasetIndex !== undefined;
-            const isHidden = isDataset && !chart.isDatasetVisible(item.datasetIndex);
-            
-            legendItem.className = 'legend-item' + (isHidden ? ' hidden' : '');
-            if (isDataset) {
-                legendItem.onclick = () => {
-                    chart.setDatasetVisibility(item.datasetIndex, !chart.isDatasetVisible(item.datasetIndex));
-                    legendItem.classList.toggle('hidden', !chart.isDatasetVisible(item.datasetIndex));
-                    chart.update('none');
-                };
-            } else {
-                legendItem.style.cursor = 'default';
-            }
-
-            const colorDot = document.createElement('span');
-            colorDot.className = 'legend-color-dot';
-
-            if (item.label === 'Time') {
-                colorDot.innerHTML = '⏱️';
-                colorDot.style.backgroundColor = 'transparent';
-                colorDot.style.fontSize = '14px';
-                colorDot.style.width = 'auto';
-                colorDot.style.height = 'auto';
-                colorDot.style.borderRadius = '0';
-                colorDot.style.lineHeight = '1';
-            } else if (isDataset) {
-                colorDot.style.backgroundColor = isDarkMode() ? item.color : item.lightColor;
-            } else {
-                 colorDot.style.backgroundColor = 'transparent';
-            }
-
-            const labelText = document.createElement('span');
-            labelText.className = 'legend-label-text';
-            labelText.textContent = `${item.label}:`;
-            
-            const labelValue = document.createElement('span');
-            labelValue.className = 'legend-label-value';
-            labelValue.id = `${chart.canvas.id}-legend-${item.label.replace(/\s+/g, '')}`;
-            
-            legendItem.appendChild(colorDot);
-            legendItem.appendChild(labelText);
-            legendItem.appendChild(labelValue);
-            legendContainer.appendChild(legendItem);
+            table.appendChild(tr);
         });
-
-        if (containerId === 'temperatureChartLegend') {
-            const legendItem = document.createElement('div');
-            legendItem.className = 'legend-item';
-            legendItem.style.cursor = 'default';
-
-            const colorDot = document.createElement('span');
-            colorDot.className = 'legend-color-dot';
-            colorDot.innerHTML = '<strong>Δ</strong>';
-            colorDot.style.backgroundColor = 'transparent';
-            colorDot.style.width = 'auto';
-            colorDot.style.height = 'auto';
-            colorDot.style.borderRadius = '0';
-            colorDot.style.textAlign = 'center';
-            colorDot.style.minWidth = '12px';
-            colorDot.style.fontSize = '14px';
-            colorDot.style.lineHeight = '1';
-
-            const labelText = document.createElement('span');
-labelText.className = 'legend-label-text';
-            labelText.textContent = 'Difference:';
-
-            const labelValue = document.createElement('span');
-            labelValue.className = 'legend-label-value';
-            labelValue.id = 'temp-diff-value';
-
-            legendItem.appendChild(colorDot);
-            legendItem.appendChild(labelText);
-            legendItem.appendChild(labelValue);
-            legendContainer.appendChild(legendItem);
-        }
-    }
+        legendContainer.appendChild(table);
+    } 
 
     function updateLegendValues(chart, primaryIndex, compareIndex, hoverTime) {
         const config = datasetConfigStore;
+        
         Object.keys(config).forEach(key => {
-            const valueEl = document.getElementById(`${chart.canvas.id}-legend-${config[key].label.replace(/\s+/g, '')}`);
+            const valueEl = document.getElementById(`legend-value-${key}`);
             if (valueEl) {
                 let value = null;
                 if (key.includes('_compare')) {
@@ -1100,7 +1206,6 @@ labelText.className = 'legend-label-text';
                          value = chartDataStore[key]?.[primaryIndex];
                     }
                 }
-
                 if (value !== undefined && value !== null) {
                     valueEl.textContent = `${value.toFixed(2)} ${config[key].unit || ''}`;
                 } else {
@@ -1109,33 +1214,28 @@ labelText.className = 'legend-label-text';
             }
         });
 
-        if (chart.canvas.id === 'temperatureChart') {
-            const tempDiffElement = document.getElementById('temp-diff-value');
-            if (tempDiffElement) {
-                const currentTemp = chartDataStore.ct?.[primaryIndex];
-                const targetTemp = chartDataStore.tt?.[primaryIndex];
-                if (currentTemp != null && targetTemp != null) {
-                    const difference = targetTemp - currentTemp;
-                    tempDiffElement.textContent = `${difference.toFixed(2)} °C`;
-                } else {
-                    tempDiffElement.textContent = '---';
-                }
+        const tempDiffElement = document.getElementById('temp-diff-value');
+        if (tempDiffElement) {
+            const currentTemp = chartDataStore.ct?.[primaryIndex];
+            const targetTemp = chartDataStore.tt?.[primaryIndex];
+            if (currentTemp != null && targetTemp != null) {
+                const difference = targetTemp - currentTemp;
+                tempDiffElement.textContent = `${difference.toFixed(2)} °C`;
+            } else {
+                tempDiffElement.textContent = '---';
             }
         }
     }
 
-    function clearLegendValues(chart) {
-        chart.data.datasets.forEach(dataset => {
-             const valueEl = document.getElementById(`${chart.canvas.id}-legend-${dataset.label.replace(/\s+/g, '')}`);
+    function clearLegendValues() {
+        const config = datasetConfigStore;
+        Object.keys(config).forEach(key => {
+             const valueEl = document.getElementById(`legend-value-${key}`);
              if(valueEl) valueEl.innerHTML = '&nbsp;';
         });
-        const timeValueEl = document.getElementById(`${chart.canvas.id}-legend-Time`);
-        if(timeValueEl) timeValueEl.innerHTML = '&nbsp;';
-        const compareKeys = Object.keys(datasetConfigStore).filter(k => k.includes('_compare'));
-        compareKeys.forEach(key => {
-            const valueEl = document.getElementById(`${chart.canvas.id}-legend-${datasetConfigStore[key].label.replace(/\s+/g, '')}`);
-            if (valueEl) valueEl.innerHTML = '&nbsp;';
-        });
+
+        const diffEl = document.getElementById('temp-diff-value');
+        if (diffEl) diffEl.innerHTML = '&nbsp;';
     }
 
     function setupRatioCalculator(yieldValue, defaultRatioText) {
@@ -1156,29 +1256,29 @@ labelText.className = 'legend-label-text';
             });
         }
     }
-    
+
     function displayShotDetails(data) {
         const yieldValue = data.volume ? data.volume.toFixed(1) : 'N/A';
         const peakPressure = data.samples && data.samples.length > 0 ? Math.max(...data.samples.map(s => s.cp || 0)).toFixed(1) : 'N/A';
-        
+
         const targetTemps = data.samples.map(s => s.tt).filter(t => t > 0);
         const tempValue = targetTemps.length > 0 ? Math.round(targetTemps[0]) + '°C' : 'N/A';
-        
+
         let pressureValue = 'N/A';
         if (data.samples && data.samples.length > 0) {
             const finalPressure = data.samples[data.samples.length - 1].cp.toFixed(1);
             pressureValue = `${peakPressure} &rarr; ${finalPressure} bar`;
         }
-        
+
         const shotStartIndex = data.samples.findIndex(s => (s.tp > 0 || s.tf > 0));
-        
+
         let timeValue = data.duration ? (data.duration / 1000).toFixed(1) : 'N/A';
         if (shotStartIndex !== -1 && data.samples.length > 0) {
             const shotStartTime = data.samples[shotStartIndex].t;
             const lastSampleTime = data.samples[data.samples.length - 1].t;
             timeValue = ((lastSampleTime - shotStartTime) / 1000).toFixed(1);
         }
-        
+
         let firstDripsValue = 'N/A';
         if (shotStartIndex !== -1) {
             const shotStartTime = data.samples[shotStartIndex].t;
@@ -1188,13 +1288,13 @@ labelText.className = 'legend-label-text';
                 firstDripsValue = ((firstDripTime - shotStartTime) / 1000).toFixed(1);
             }
         }
-        
+
         let defaultRatioText = 'N/A';
         if (yieldValue !== 'N/A') {
             const defaultRatio = parseFloat(yieldValue) / 18.0;
             defaultRatioText = `1:${defaultRatio.toFixed(2)}`;
         }
-        
+
         const date = new Date(data.timestamp * 1000);
         const options = {
             weekday: 'long',
@@ -1207,10 +1307,10 @@ labelText.className = 'legend-label-text';
         };
         const parts = new Intl.DateTimeFormat('en-US', options).formatToParts(date);
         const find = (partType) => parts.find(p => p.type === partType)?.value || '';
-        const formattedTimestamp = data.timestamp 
+        const formattedTimestamp = data.timestamp
             ? `${find('weekday')}, ${find('month')} ${find('day')}, ${find('year')} at ${find('hour')}:${find('minute')} ${find('dayPeriod')}`
             : 'N/A';
-        
+
         shotDetailsContainer.innerHTML = `
             <div class="profile-info">
                 <h2>${data.profile || 'Shot Profile'}</h2>
@@ -1218,10 +1318,10 @@ labelText.className = 'legend-label-text';
             </div>
             <textarea id="shotDescription" class="description-input" rows="2" placeholder="Notes:"></textarea>
         `;
-        
+
         shotVitalsContainer.innerHTML = `
             <h3>Shot Metrics</h3>
-            
+
             <h4>☕ Coffee & Dose</h4>
             <div class="vitals-row">
                 <span class="vitals-label">Dose:</span>
@@ -1241,7 +1341,7 @@ labelText.className = 'legend-label-text';
                 <span class="vitals-label">Beans:</span>
                 <span class="vitals-value"><input type="text" class="vitals-input" placeholder="Alto Grande"></span>
             </div>
-            
+
             <h4>📊 Extraction</h4>
             <div class="vitals-row">
                 <span class="vitals-label">Yield:</span>
@@ -1284,13 +1384,13 @@ labelText.className = 'legend-label-text';
         `;
 
         setupRatioCalculator(yieldValue, defaultRatioText);
-        
+
         const allTextInputs = document.querySelectorAll('#shotDescription, #shotVitals .vitals-input, #shotVitals .vitals-textarea');
         allTextInputs.forEach(input => {
             input.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter') {
-                    event.preventDefault(); 
-                    input.blur(); 
+                    event.preventDefault();
+                    input.blur();
                 }
             });
         });

@@ -1,7 +1,5 @@
 /* =================================================================
-   ROOT VARIABLES & THEME SETUP
-   - Defines color variables for both light and dark modes.
-   - This makes it easy to manage themes and maintain consistency.
+  ROOT VARIABLES & THEME SETUP
 ================================================================= */
 :root {
     /* Light Mode Colors */
@@ -20,10 +18,7 @@
 }
 
 /* =================================================================
-   GENERAL BODY & CONTAINER STYLES
-   - Sets the default background, text color, and font for the entire page.
-   - The .light-mode class is toggled on the body to switch themes.
-   - .container sets the max-width and centers the content.
+  GENERAL BODY & CONTAINER STYLES
 ================================================================= */
 body {
     background-color: var(--bg-dark);
@@ -48,8 +43,7 @@ body.light-mode {
 }
 
 /* =================================================================
-   HEADER & BUTTON STYLES
-   - The header uses a 3-column grid for balanced alignment.
+  HEADER & BUTTON STYLES
 ================================================================= */
 .header {
     display: grid;
@@ -94,15 +88,14 @@ body.light-mode {
     vertical-align: sub;
 }
 
-/* NEW: Styles for Icon Buttons in the header */
 .icon-button {
     display: flex;
     flex-direction: column; 
     align-items: center;
-    width: 50px; /* MODIFIED: Added fixed width for alignment */
-    gap: 6px; 
+    width: 40px;
+    gap: 4px;
     cursor: pointer;
-    padding: 8px 12px; 
+    padding: 6px 10px;
     border-radius: 8px;
     transition: background-color 0.2s ease-in-out;
     color: var(--text-secondary-dark);
@@ -119,16 +112,16 @@ body.light-mode .icon-button {
     background-color: #3C4043;
 }
 
-body.light-mode .icon-button:hover {
-    background-color: #e8eaed;
+:root body.light-mode .icon-button:hover {
+    background-color: #dadce0;
 }
 
 .icon-button .material-symbols-outlined {
-    font-size: 40px; 
+    font-size: 32px;
 }
 
 .icon-button span:last-child {
-    font-size: 14px; 
+    font-size: 12px;
     font-weight: 500;
     white-space: nowrap;
 }
@@ -139,9 +132,7 @@ input[type="file"] {
 }
 
 /* =================================================================
-   DRAG-AND-DROP AREA
-   - Styles the initial file upload interface. It's hidden by JavaScript
-     after a file is successfully loaded.
+  DRAG-AND-DROP AREA
 ================================================================= */
 #drop-area {
     width: 100%;
@@ -186,9 +177,7 @@ body.light-mode #drop-area.highlight {
 
 
 /* =================================================================
-   MAIN CONTENT WRAPPER & SHOT DETAILS
-   - #export-wrapper holds all the content that will be converted to a PNG.
-   - .shot-details and .stats-grid style the profile information area.
+  MAIN CONTENT WRAPPER & SHOT DETAILS
 ================================================================= */
 #export-wrapper {
     display: none;
@@ -258,8 +247,7 @@ body.light-mode .description-input:focus {
 }
 
 /* =================================================================
-   CONTENT GRID & SHOT VITALS PANEL
-   - Styles for the two-column layout and the vitals panel.
+  CONTENT GRID & SHOT VITALS PANEL
 ================================================================= */
 .content-grid {
     display: grid;
@@ -394,10 +382,7 @@ body.light-mode .vitals-textarea:focus {
 }
 
 /* =================================================================
-   CHARTS & LEGENDS
-   - Sets the height for the chart containers.
-   - Styles the custom legends below each chart, including colors,
-     spacing, and hover effects.
+  CHARTS & LEGENDS
 ================================================================= */
 .charts-container {
     display: none;
@@ -416,63 +401,116 @@ body.light-mode .vitals-textarea:focus {
 }
 
 .legend-container {
-    display: flex;
-    flex-wrap: wrap;
-    column-gap: 15px; 
-    row-gap: 4px;      
     margin-top: 12px;
     margin-bottom: 4px;
-    justify-content: center;
-    /* min-height: 95px; */
-    height: auto;
-    align-content: flex-start; /* MODIFIED: Aligns rows to the top */
+    text-align: center;
 }
-.legend-item {
-    display: flex;
-    align-items: center;
-    padding: 6px 12px;
-    border-radius: 16px;
-    cursor: pointer;
+
+.legend-table {
+    width: auto;
+    border-collapse: collapse;
+    table-layout: fixed;
+    display: inline-table;
+    vertical-align: top;
+    margin: 0;
+}
+
+.legend-table.temp {
+    position: static;
+    left: auto;
+}
+
+.legend-table td {
+    border: none;
+    padding: 2px 4px;
+    vertical-align: middle;
+    font-size: 12px;
+    border-radius: 6px;
     transition: background-color 0.2s;
-    font-size: 13px;
+}
+
+.legend-cell-label {
+    text-align: left;
+    width: 140px; 
+}
+
+.legend-cell-value {
+    text-align: left;
+    width: 90px;
+}
+
+.legend-item {
+    display: inline-flex;
+    align-items: center;
     color: var(--text-secondary-dark);
 }
 body.light-mode .legend-item { color: var(--text-secondary-light); }
 
-.legend-item:hover {
+.legend-cell-label.hover {
     background-color: #3C4043;
 }
-body.light-mode .legend-item:hover { background-color: #e8eaed; }
+body.light-mode .legend-cell-label.hover {
+    background-color: #e8eaed;
+}
 
-.legend-item.hidden {
+.legend-cell-label.hidden,
+.legend-cell-value.hidden {
     opacity: 0.5;
 }
-.legend-color-dot {
+
+.legend-table .legend-color-dot {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.legend-table .legend-color-dot.is-dot::before {
+    content: '';
+    display: block;
     width: 12px;
     height: 12px;
-    margin-right: 8px;
     border-radius: 50%;
+    background-color: var(--dot-color);
+}
+
+/* This rule was removed as it caused non-interactive items to have a hover effect */
+/*
+#temperatureChartLegend .legend-item:hover {
+    background-color: #3C4043;
+}
+body.light-mode #temperatureChartLegend .legend-item:hover {
+    background-color: #e8eaed; 
+}
+*/
+
+#temperatureChartLegend .legend-color-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
     flex-shrink: 0;
 }
+
 .legend-label-text {
-    margin-right: 4px;
-}
-.legend-label-value {
-    min-width: 75px;
-    display: inline-block;
     text-align: left;
+    margin-right: 4px;
+    white-space: nowrap;
+}
+
+.legend-label-value {
     font-weight: bold;
     color: inherit;
-}
-.legend-break {
-    flex-basis: 100%;
-    height: 0;
+    white-space: nowrap;
 }
 
 /* =================================================================
-   THEME TOGGLE SWITCH
-   - Custom styles for the light/dark mode toggle switch, giving it
-     a modern, animated feel.
+  THEME TOGGLE SWITCH
 ================================================================= */
 .switch-wrapper {
     display: flex;
@@ -560,9 +598,7 @@ body.light-mode .switch-wrapper .material-symbols-outlined.light-mode-icon {
 }
 
 /* =================================================================
-   UTILITY & MISCELLANEOUS
-   - Styles for the custom tooltip that appears on chart hover.
-   - Styles for the error message display.
+  UTILITY & MISCELLANEOUS
 ================================================================= */
 #customTooltip {
     display: none;
